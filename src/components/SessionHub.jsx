@@ -6,12 +6,7 @@ import Settings from "./Settings";
   session and the primary "New artwork" action. Session is in-memory only, so
   this resets on reload — the records themselves are safe in Airtable.
 */
-export default function SessionHub({
-  configured,
-  onConfigured,
-  session,
-  onNew,
-}) {
+export default function SessionHub({ session, onNew, onLogout }) {
   return (
     <div className="flex flex-1 flex-col gap-5">
       <header className="flex items-center justify-between">
@@ -25,15 +20,8 @@ export default function SessionHub({
               : "Photo → straighten → speak → save"}
           </p>
         </div>
-        <Settings onSaved={onConfigured} />
+        <Settings onLogout={onLogout} />
       </header>
-
-      {!configured && (
-        <div className="rounded-md border bg-muted/40 p-4 text-sm">
-          Add your API keys in <strong>Settings</strong> (OpenAI, Anthropic,
-          Airtable token + base ID) to get started.
-        </div>
-      )}
 
       {/* session list */}
       <div className="flex flex-1 flex-col gap-2">
@@ -76,12 +64,7 @@ export default function SessionHub({
       </div>
 
       {/* primary action, pinned at the bottom for thumb reach */}
-      <Button
-        size="lg"
-        className="w-full"
-        onClick={onNew}
-        disabled={!configured}
-      >
+      <Button size="lg" className="w-full" onClick={onNew}>
         📷 New artwork
       </Button>
     </div>

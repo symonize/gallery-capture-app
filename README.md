@@ -93,8 +93,10 @@ variables, and in a local `.env` for `netlify dev`):
 Optional overrides: `CLAUDE_MODEL`, `ARTISTS_TABLE`, `COLLECTIONS_TABLE`,
 `ARTWORKS_TABLE`, `ARTWORKS_IMAGE_FIELD`. See `.env.example`.
 
-In the app itself, the only thing a user enters is the **app password**
-(Settings), stored in this device's `localStorage`.
+In the app itself, the only thing a user enters is the **app password** — on
+the login screen at launch (verified against `APP_PASSWORD` via `/api/verify`).
+It's stored in this device's `localStorage`, so it's entered once; **Settings →
+Log out** clears it and returns to the login screen.
 
 ## 5. Run
 
@@ -141,9 +143,11 @@ netlify/functions/   server-side proxies (hold the API keys)
   collections.js      Airtable collections (list / create)
   artworks.js         Airtable artwork create
   upload-image.js     Airtable image attachment
+  verify.js           password check for the login screen
 src/
   lib/
     config.js       app-password storage + isConfigured()
+    theme.js        light/dark theme get/set/apply (defaults dark)
     api.js          apiFetch() → /api/* with the password header
     airtable.js     artists + collections + artworks + image (via /api)
     transcribe.js   calls /api/transcribe
@@ -151,13 +155,14 @@ src/
     opencv.js       OpenCV.js loader + perspective transform
     utils.js        cn()
   components/
+    AuthScreen.jsx           login gate (verifies password, then unlocks)
     SessionHub.jsx           session list + New artwork
     CaptureWizard.jsx        owns the 3-step capture flow
     PerspectiveCropper.jsx   draggable-corner de-skew
     DescribeStep.jsx         voice capture (whole-clip + field-by-field)
     ReviewStep.jsx           review fields, confirm-as-you-go, save
     VoiceCapture.jsx         recorder hook + press-to-talk mic
-    Settings.jsx             app-password sheet
+    Settings.jsx             theme toggle + log out
     ui/                      ← coss ui components (added via CLI)
-  App.jsx           hub ⇄ capture view switch
+  App.jsx           auth gate, then hub ⇄ capture view switch
 ```

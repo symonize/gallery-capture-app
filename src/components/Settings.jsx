@@ -14,10 +14,17 @@ import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { getConfig, saveConfig } from "@/lib/config";
+import { getTheme, setTheme } from "@/lib/theme";
 
 export default function Settings({ onSaved }) {
   const [c, setC] = useState(getConfig());
+  const [theme, setThemeState] = useState(getTheme());
   const set = (k) => (e) => setC((p) => ({ ...p, [k]: e.target.value }));
+
+  // Theme applies immediately (and persists) — independent of Save.
+  function chooseTheme(next) {
+    setThemeState(setTheme(next));
+  }
 
   function save() {
     saveConfig(c);
@@ -48,6 +55,28 @@ export default function Settings({ onSaved }) {
               Set by the site owner (the APP_PASSWORD env var). Stored on this
               device so you only enter it once.
             </FieldDescription>
+          </Field>
+
+          <Field>
+            <FieldLabel>Theme</FieldLabel>
+            <div className="inline-flex w-full rounded-md border p-0.5">
+              <Button
+                className="flex-1"
+                size="sm"
+                variant={theme === "dark" ? "default" : "ghost"}
+                onClick={() => chooseTheme("dark")}
+              >
+                🌙 Dark
+              </Button>
+              <Button
+                className="flex-1"
+                size="sm"
+                variant={theme === "light" ? "default" : "ghost"}
+                onClick={() => chooseTheme("light")}
+              >
+                ☀️ Light
+              </Button>
+            </div>
           </Field>
         </SheetPanel>
         <SheetFooter>

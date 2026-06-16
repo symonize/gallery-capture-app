@@ -10,6 +10,20 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#0a0a0a" />
     <title>Gallery Capture</title>
+    <!--
+      Apply the theme before paint to avoid a flash. Defaults to dark when no
+      preference is stored. Keep this in sync with src/lib/theme.js.
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("gallery-capture:theme") || "dark";
+          if (t === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

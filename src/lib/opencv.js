@@ -112,7 +112,10 @@ function orderPoints(pts) {
   return [tl, tr, br, bl];
 }
 
-// Returns 4 {x,y} in image pixel space. Falls back to an inset rectangle.
+// Returns 4 {x,y} in the image's natural pixel space. Falls back to an inset
+// rectangle if no convincing quad is found. Detection runs on a downscaled copy
+// (full-res phone photos are huge — slow and can exhaust iOS memory), then the
+// detected corners are scaled back to natural coordinates.
 export function detectQuad(cv, imgEl) {
   const w = imgEl.naturalWidth || imgEl.width;
   const h = imgEl.naturalHeight || imgEl.height;
@@ -123,31 +126,45 @@ export function detectQuad(cv, imgEl) {
     { x: w * sx, y: h * (1 - sy) },
   ];
 
-  let src, gray, blur, edges, contours, hierarchy;
+  // Downscale so the longest side is ~1000px for detection.
+  const MAX = 1000;
+  const ratio = Math.min(1, MAX / Math.max(w, h));
+  const dw = Math.max(1, Math.round(w * ratio));
+  const dh = Math.max(1, Math.round(h * ratio));
+
+  let work;
   try {
-    src = cv.imread(imgEl);
+    work = document.createElement("canvas");
+    work.width = dw;
+    work.height = dh;
+    work.getContext("2d").drawImage(imgEl, 0, 0, dw, dh);
+  } catch {
+    return inset(0.08, 0.08);
+  }
+
+  let src, gray, blur, edges, kernel, contours, hierarchy, best;
+  try {
+    src = cv.imread(work);
     gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
     blur = new cv.Mat();
     cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
     edges = new cv.Mat();
-    cv.Canny(blur, edges, 75, 200);
-    const kernel = cv.Mat.ones(5, 5, cv.CV_8U);
+    cv.Canny(blur, edges, 50, 150); // a bit more sensitive than 75/200
+    kernel = cv.Mat.ones(5, 5, cv.CV_8U);
     cv.dilate(edges, edges, kernel);
-    kernel.delete();
 
     contours = new cv.MatVector();
     hierarchy = new cv.Mat();
-    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
-    let best = null;
-    let bestArea = (w * h) * 0.15; // ignore anything smaller than 15% of frame
+    let bestArea = dw * dh * 0.1; // ignore anything smaller than 10% of frame
     for (let i = 0; i < contours.size(); i++) {
       const c = contours.get(i);
       const peri = cv.arcLength(c, true);
       const approx = new cv.Mat();
       cv.approxPolyDP(c, approx, 0.02 * peri, true);
-      if (approx.rows === 4) {
+      if (approx.rows === 4 && cv.isContourConvex(approx)) {
         const area = cv.contourArea(approx);
         if (area > bestArea) {
           bestArea = area;
@@ -165,9 +182,9 @@ export function detectQuad(cv, imgEl) {
       const d = best.data32S;
       const pts = [];
       for (let i = 0; i < 4; i++) {
-        pts.push({ x: d[i * 2], y: d[i * 2 + 1] });
+        // Scale detection-space points back to natural image coordinates.
+        pts.push({ x: d[i * 2] / ratio, y: d[i * 2 + 1] / ratio });
       }
-      best.delete();
       if (pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
         return orderPoints(pts);
       }
@@ -176,6 +193,8 @@ export function detectQuad(cv, imgEl) {
   } catch {
     return inset(0.08, 0.08);
   } finally {
+    best?.delete();
+    kernel?.delete();
     src?.delete();
     gray?.delete();
     blur?.delete();

@@ -221,7 +221,7 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
         {!ready && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/60">
             <Spinner />{" "}
-            <span className="ml-2 text-sm">Loading de-skew… (build v6)</span>
+            <span className="ml-2 text-sm">Loading de-skew… (build v7)</span>
           </div>
         )}
       </div>

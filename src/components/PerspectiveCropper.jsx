@@ -121,13 +121,19 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
 
   // "Use as-is": export the original image as a JPEG data URL (no warp), so the
   // save path always receives a base64 data URL — never the raw blob: object URL.
+  // Capped to ~1600px so the upload stays well under Netlify's 6MB body limit
+  // (a full-res phone photo's base64 can exceed it and fail the save).
   function skip() {
     const img = imgRef.current;
     if (!img) return;
+    const nw = img.naturalWidth || img.width;
+    const nh = img.naturalHeight || img.height;
+    const MAX = 1600;
+    const r = Math.min(1, MAX / Math.max(nw, nh));
     const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    canvas.getContext("2d").drawImage(img, 0, 0);
+    canvas.width = Math.max(1, Math.round(nw * r));
+    canvas.height = Math.max(1, Math.round(nh * r));
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
     onSkip(canvas.toDataURL("image/jpeg", 0.92));
   }
 

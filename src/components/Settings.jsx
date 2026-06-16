@@ -29,33 +29,25 @@ export default function Settings({ onSaved }) {
       <SheetTrigger render={<Button variant="outline" size="sm">Settings</Button>} />
       <SheetPopup side="right">
         <SheetHeader>
-          <SheetTitle>API keys &amp; Airtable</SheetTitle>
+          <SheetTitle>App access</SheetTitle>
           <SheetDescription>
-            Stored locally on this device. See the README security note before
-            sharing this app with others.
+            Enter the app password to use this device. API keys live securely on
+            the server — they’re never stored in your browser.
           </SheetDescription>
         </SheetHeader>
         <SheetPanel className="flex flex-col gap-4 p-4">
           <Field>
-            <FieldLabel>OpenAI API key (Whisper)</FieldLabel>
-            <Input type="password" value={c.openaiKey} onChange={set("openaiKey")} placeholder="sk-…" />
-          </Field>
-          <Field>
-            <FieldLabel>Anthropic API key (Claude)</FieldLabel>
-            <Input type="password" value={c.anthropicKey} onChange={set("anthropicKey")} placeholder="sk-ant-…" />
-          </Field>
-          <Field>
-            <FieldLabel>Airtable personal access token</FieldLabel>
-            <Input type="password" value={c.airtableToken} onChange={set("airtableToken")} placeholder="pat…" />
-          </Field>
-          <Field>
-            <FieldLabel>Airtable Base ID</FieldLabel>
-            <Input value={c.airtableBaseId} onChange={set("airtableBaseId")} placeholder="app…" />
-            <FieldDescription>Find it in the Airtable API docs for your base.</FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel>Claude model</FieldLabel>
-            <Input value={c.claudeModel} onChange={set("claudeModel")} />
+            <FieldLabel>App password</FieldLabel>
+            <Input
+              type="password"
+              value={c.appPassword}
+              onChange={set("appPassword")}
+              placeholder="••••••••"
+            />
+            <FieldDescription>
+              Set by the site owner (the APP_PASSWORD env var). Stored on this
+              device so you only enter it once.
+            </FieldDescription>
           </Field>
         </SheetPanel>
         <SheetFooter>

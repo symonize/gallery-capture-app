@@ -76,85 +76,88 @@ Create a **personal access token** (Airtable → Developer hub) with scopes
 `data.records:read`, `data.records:write`, and access to this base. Grab the
 **Base ID** (`app…`) from the base's API docs.
 
-## 4. Add your keys
+## 4. Configure secrets
 
-Open the app, tap **Settings**, and paste: OpenAI key (Whisper), Anthropic key
-(Claude), Airtable token, and Base ID. They're stored in this device's
-`localStorage`. For local dev you can instead copy `.env.example` to `.env`.
+API keys live **server-side** in Netlify Functions — never in the browser. Set
+these environment variables (Netlify dashboard → Site settings → Environment
+variables, and in a local `.env` for `netlify dev`):
+
+| Var | What |
+| --- | --- |
+| `APP_PASSWORD` | Shared password the app prompts for; gates every `/api` call |
+| `OPENAI_API_KEY` | Whisper transcription |
+| `ANTHROPIC_API_KEY` | Claude transcript → fields |
+| `AIRTABLE_TOKEN` | Airtable personal access token |
+| `AIRTABLE_BASE_ID` | Airtable base id |
+
+Optional overrides: `CLAUDE_MODEL`, `ARTISTS_TABLE`, `COLLECTIONS_TABLE`,
+`ARTWORKS_TABLE`, `ARTWORKS_IMAGE_FIELD`. See `.env.example`.
+
+In the app itself, the only thing a user enters is the **app password**
+(Settings), stored in this device's `localStorage`.
 
 ## 5. Run
 
 ```bash
-pnpm dev          # then open the printed LAN URL on your phone
+cp .env.example .env   # fill in the vars above
+pnpm dev:netlify       # netlify dev: Vite + the /api functions together
 ```
 
-Camera, microphone, and PWA install all require **HTTPS** (or `localhost`). On
-your phone over the LAN, use a tunnel (e.g. `cloudflared tunnel --url …`) or
-deploy. To install to the home screen: open in Safari/Chrome → Share → *Add to
-Home Screen*.
+Use `pnpm dev:netlify` (not plain `pnpm dev`) so the `/api/*` functions run
+locally. Camera, microphone, and PWA install all require **HTTPS** (or
+`localhost`). On your phone over the LAN, use a tunnel (e.g.
+`cloudflared tunnel --url …`) or deploy. To install to the home screen: open in
+Safari/Chrome → Share → *Add to Home Screen*.
 
-## 6. Deploy
+## 6. Deploy (Netlify)
 
-Any static host works (Netlify, Vercel, Cloudflare Pages):
-
-```bash
-pnpm build        # outputs dist/
-```
+Import the repo in Netlify; build settings come from `netlify.toml`
+(`pnpm build` → `dist`, functions in `netlify/functions`, `/api/*` routed to
+them). Set the environment variables from step 4 in the dashboard, then deploy.
 
 ---
 
-## ⚠️ Security note — keys in the browser
+## Security model
 
-This is a **pure client-side** app, so the OpenAI / Anthropic / Airtable keys
-live in the browser and are visible to anyone with the device or devtools.
-That's a fine tradeoff for a personal capture tool **you** run. **Do not** ship
-it to gallery staff or the public as-is.
-
-### Upgrade path (when others will use it)
-
-Move the three API calls behind serverless functions and have the client call
-those instead. All key access is isolated to `src/lib/{transcribe,parse,airtable}.js`,
-so this is a localized change. Example Netlify function:
-
-```js
-// netlify/functions/parse.js
-export default async (req) => {
-  const { transcript } = await req.json();
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,   // server-side, never shipped
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1024, messages: [{ role: "user", content: transcript }] }),
-  });
-  return new Response(await r.text(), { headers: { "content-type": "application/json" } });
-};
-```
-
-Then point `parse.js` at `/.netlify/functions/parse` instead of Anthropic
-directly, and do the same for Whisper and Airtable. Keys move to environment
-variables on the host and never reach the client.
+API keys are held only in Netlify env vars and used inside the functions in
+`netlify/functions/` — they never reach the client bundle. The browser talks
+only to our own `/api/*` endpoints, authenticated with the shared
+`APP_PASSWORD` (sent as the `x-app-password` header, compared in constant time
+server-side). Anyone with the password can use the app and spend your API
+credits — rotate the env var if it leaks. This is a private-tool model, not
+hardened multi-user auth; for that, swap the password gate for Netlify Identity
+or similar.
 
 ---
 
 ## Project layout
 
 ```
+netlify/functions/   server-side proxies (hold the API keys)
+  _shared.js          auth gate + Airtable/env helpers
+  transcribe.js       OpenAI Whisper
+  parse.js            Anthropic (transcript → fields)
+  artists.js          Airtable artists (list / create)
+  collections.js      Airtable collections (list / create)
+  artworks.js         Airtable artwork create
+  upload-image.js     Airtable image attachment
 src/
   lib/
-    config.js       key storage + getters
-    airtable.js     artists + artworks + image upload
-    transcribe.js   Whisper
-    parse.js        Claude transcript → fields
+    config.js       app-password storage + isConfigured()
+    api.js          apiFetch() → /api/* with the password header
+    airtable.js     artists + collections + artworks + image (via /api)
+    transcribe.js   calls /api/transcribe
+    parse.js        calls /api/parse
     opencv.js       OpenCV.js loader + perspective transform
     utils.js        cn()
   components/
+    SessionHub.jsx           session list + New artwork
+    CaptureWizard.jsx        owns the 3-step capture flow
     PerspectiveCropper.jsx   draggable-corner de-skew
+    DescribeStep.jsx         voice capture (whole-clip + field-by-field)
+    ReviewStep.jsx           review fields, confirm-as-you-go, save
     VoiceCapture.jsx         recorder hook + press-to-talk mic
-    CaptureForm.jsx          fields, voice modes, save
-    Settings.jsx             keys sheet
+    Settings.jsx             app-password sheet
     ui/                      ← coss ui components (added via CLI)
-  App.jsx           capture → crop → form flow
+  App.jsx           hub ⇄ capture view switch
 ```

@@ -20,3 +20,9 @@ dist
 tasks.db
 tasks.db-shm
 tasks.db-wal
+
+# Local Netlify folder
+.netlify
+
+# netlify dev artifact
+deno.lock

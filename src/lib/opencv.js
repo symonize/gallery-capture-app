@@ -7,12 +7,11 @@
   Coordinates throughout are in the source image's natural pixel space.
 */
 
-// Official OpenCV.js builds. opencv.org occasionally removes old version dirs
-// (4.10.0 vanished -> 404), so we try a primary then fall back to a CDN mirror.
-const OPENCV_URLS = [
-  "https://docs.opencv.org/4.9.0/opencv.js",
-  "https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.js",
-];
+// Self-contained OpenCV.js build (asm.js — the wasm is embedded, so there is no
+// separate .wasm file to fetch). The docs.opencv.org 4.x builds reference an
+// external opencv_js.wasm that 404s on the CDN, which made init hang forever.
+// This jsDelivr npm build is immutable, CORS-enabled, and needs no extra files.
+const OPENCV_URLS = ["https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.js"];
 let loadPromise = null;
 
 // OpenCV.js is an Emscripten module: the script loads quickly but the WASM

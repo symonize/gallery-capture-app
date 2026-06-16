@@ -20,6 +20,12 @@ export async function handler(event) {
   if (!audioBase64) return json(400, { error: "Missing audioBase64." });
 
   const buf = Buffer.from(audioBase64, "base64");
+  // Guard tiny clips so Whisper doesn't reject them with a cryptic 400.
+  if (buf.length < 2000) {
+    return json(422, {
+      error: "Recording too short — hold the mic while you speak.",
+    });
+  }
   const type = ext === "m4a" ? "audio/mp4" : "audio/webm";
 
   const form = new FormData();

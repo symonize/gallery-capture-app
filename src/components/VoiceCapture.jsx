@@ -15,6 +15,7 @@ export function useRecorder() {
   const recRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  const startedAtRef = useRef(0);
   const [recording, setRecording] = useState(false);
 
   const start = useCallback(async () => {
@@ -24,8 +25,11 @@ export function useRecorder() {
     const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     chunksRef.current = [];
     rec.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
-    rec.start();
+    // timeslice: emit chunks periodically so a short hold still captures audio
+    // (without it, ondataavailable only fires at stop and can yield nothing).
+    rec.start(250);
     recRef.current = rec;
+    startedAtRef.current = Date.now();
     setRecording(true);
   }, []);
 
@@ -33,20 +37,40 @@ export function useRecorder() {
     return new Promise((resolve) => {
       const rec = recRef.current;
       if (!rec) return resolve(null);
-      rec.onstop = () => {
+
+      const finish = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        recRef.current = null;
+        setRecording(false);
         const blob = new Blob(chunksRef.current, {
           type: rec.mimeType || "audio/webm",
         });
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        setRecording(false);
-        resolve(blob);
+        const durationMs = Date.now() - startedAtRef.current;
+        resolve({ blob, durationMs });
       };
-      rec.stop();
+
+      rec.onstop = finish;
+      // Pull any final buffered audio before stopping, then stop.
+      try {
+        rec.requestData?.();
+      } catch {
+        /* not all browsers support requestData */
+      }
+      // Give the recorder a tick to flush the last chunk on a quick release.
+      setTimeout(() => {
+        if (rec.state !== "inactive") rec.stop();
+        else finish();
+      }, 120);
     });
   }, []);
 
   return { recording, start, stop };
 }
+
+// Minimum hold to count as a real recording (ms). Below this, Whisper rejects
+// the clip as too short, so we surface a friendly hint instead of erroring.
+const MIN_RECORD_MS = 400;
 
 /*
   Press-and-hold mic button. onComplete(blob) fires on release.
@@ -55,21 +79,49 @@ export function useRecorder() {
 export function MicButton({ onComplete, busy, label = "Hold to talk", size }) {
   const { recording, start, stop } = useRecorder();
   const [err, setErr] = useState("");
+  const startingRef = useRef(false);
+  const pendingStopRef = useRef(false);
 
   async function down(e) {
     e.preventDefault();
     setErr("");
+    startingRef.current = true;
+    pendingStopRef.current = false;
     try {
       await start();
+      startingRef.current = false;
+      // If the user already released during the async getUserMedia, stop now.
+      if (pendingStopRef.current) {
+        pendingStopRef.current = false;
+        await finishRecording();
+      }
     } catch {
+      startingRef.current = false;
       setErr("Microphone permission denied.");
     }
   }
+
   async function up(e) {
     e.preventDefault();
+    // Released before start() resolved — defer the stop until it does.
+    if (startingRef.current) {
+      pendingStopRef.current = true;
+      return;
+    }
     if (!recording) return;
-    const blob = await stop();
-    if (blob) onComplete(blob);
+    await finishRecording();
+  }
+
+  async function finishRecording() {
+    const result = await stop();
+    if (!result) return;
+    const { blob, durationMs } = result;
+    if (!blob || blob.size === 0 || durationMs < MIN_RECORD_MS) {
+      setErr("Too short — press and hold while you speak.");
+      return;
+    }
+    setErr("");
+    onComplete(blob);
   }
 
   return (

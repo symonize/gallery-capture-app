@@ -74,7 +74,7 @@ function loadScript(url) {
     poll = setInterval(check, 150);
     timeout = setTimeout(
       () => fail(`${url} loaded but OpenCV never initialized`),
-      25000,
+      12000,
     );
 
     document.body.appendChild(script);

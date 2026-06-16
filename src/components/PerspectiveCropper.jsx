@@ -107,6 +107,18 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
     dragging.current = null;
   }
 
+  // "Use as-is": export the original image as a JPEG data URL (no warp), so the
+  // save path always receives a base64 data URL — never the raw blob: object URL.
+  function skip() {
+    const img = imgRef.current;
+    if (!img) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext("2d").drawImage(img, 0, 0);
+    onSkip(canvas.toDataURL("image/jpeg", 0.92));
+  }
+
   function confirm() {
     if (!cvRef.current || !corners) return;
     setWorking(true);
@@ -194,7 +206,7 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
           {working ? <Spinner className="mr-2" /> : null}
           Straighten &amp; use
         </Button>
-        <Button variant="outline" onClick={() => onSkip(imageUrl)}>
+        <Button variant="outline" onClick={skip}>
           Use as-is (skip)
         </Button>
         <Button variant="ghost" onClick={onRetake}>

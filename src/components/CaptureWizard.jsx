@@ -164,9 +164,12 @@ export default function CaptureWizard({ rawUrl, onClose, onSaved }) {
         tags,
         collectionIds,
       });
-      if (finalUrl) {
+      // Only attach if we have a real base64 data URL (not a blob: URL).
+      const base64 = finalUrl?.startsWith("data:")
+        ? finalUrl.split(",")[1]
+        : null;
+      if (base64) {
         setStatus({ type: "info", msg: "Uploading image…" });
-        const base64 = finalUrl.split(",")[1];
         const filename = `${(title || "artwork")
           .replace(/\s+/g, "-")
           .toLowerCase()}.jpg`;

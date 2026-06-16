@@ -112,6 +112,136 @@ function orderPoints(pts) {
   return [tl, tr, br, bl];
 }
 
+/* ---------- geometry helpers for quad scoring ---------- */
+
+function centroid(p) {
+  return {
+    x: (p[0].x + p[1].x + p[2].x + p[3].x) / 4,
+    y: (p[0].y + p[1].y + p[2].y + p[3].y) / 4,
+  };
+}
+
+// Shoelace area (order-independent magnitude).
+function polyArea(p) {
+  let a = 0;
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    a += p[i].x * p[j].y - p[j].x * p[i].y;
+  }
+  return Math.abs(a) / 2;
+}
+
+// True if the 4 points form a convex quad (all cross products same sign).
+function isConvexQuad(pts) {
+  const o = orderPoints(pts);
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = o[i];
+    const b = o[(i + 1) % 4];
+    const c = o[(i + 2) % 4];
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (cross !== 0) {
+      const s = Math.sign(cross);
+      if (sign === 0) sign = s;
+      else if (s !== sign) return false;
+    }
+  }
+  return true;
+}
+
+// 0..1: how rectangular the quad is (opposite sides similar length + ~90° corners).
+function rectangularity(pts) {
+  const o = orderPoints(pts);
+  const len = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const sides = [
+    len(o[0], o[1]),
+    len(o[1], o[2]),
+    len(o[2], o[3]),
+    len(o[3], o[0]),
+  ];
+  if (sides.some((s) => s < 1)) return 0;
+  const wRatio = Math.min(sides[0], sides[2]) / Math.max(sides[0], sides[2]);
+  const hRatio = Math.min(sides[1], sides[3]) / Math.max(sides[1], sides[3]);
+  // Corner angles near 90°.
+  let angleScore = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = o[(i + 3) % 4];
+    const b = o[i];
+    const c = o[(i + 1) % 4];
+    const v1 = { x: a.x - b.x, y: a.y - b.y };
+    const v2 = { x: c.x - b.x, y: c.y - b.y };
+    const dot = v1.x * v2.x + v1.y * v2.y;
+    const cos = dot / (Math.hypot(v1.x, v1.y) * Math.hypot(v2.x, v2.y) || 1);
+    angleScore += 1 - Math.abs(cos); // 1 when perpendicular
+  }
+  angleScore /= 4;
+  return (wRatio + hRatio) / 2 * 0.5 + angleScore * 0.5;
+}
+
+// Approximate median gray value (0..255) for auto Canny thresholds.
+function medianGray(cv, gray) {
+  try {
+    const hist = new cv.Mat();
+    const mask = new cv.Mat();
+    const srcVec = new cv.MatVector();
+    srcVec.push_back(gray);
+    cv.calcHist(srcVec, [0], mask, hist, [256], [0, 256]);
+    const total = gray.rows * gray.cols;
+    let cum = 0;
+    let median = 128;
+    for (let i = 0; i < 256; i++) {
+      cum += hist.data32F[i];
+      if (cum >= total / 2) {
+        median = i;
+        break;
+      }
+    }
+    hist.delete();
+    mask.delete();
+    srcVec.delete();
+    return median;
+  } catch {
+    return 128;
+  }
+}
+
+// Rotated bounding box (4 corners) of the largest contour above minArea.
+function largestMinAreaRect(cv, blurGray, minArea) {
+  let edges, contours, hierarchy, best;
+  try {
+    edges = new cv.Mat();
+    cv.Canny(blurGray, edges, 50, 150);
+    const kernel = cv.Mat.ones(5, 5, cv.CV_8U);
+    cv.dilate(edges, edges, kernel);
+    kernel.delete();
+    contours = new cv.MatVector();
+    hierarchy = new cv.Mat();
+    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+    let bestArea = minArea;
+    for (let i = 0; i < contours.size(); i++) {
+      const c = contours.get(i);
+      const area = cv.contourArea(c);
+      if (area > bestArea) {
+        bestArea = area;
+        if (best) best.delete();
+        best = c.clone();
+      }
+      c.delete();
+    }
+    if (!best) return null;
+    const rot = cv.minAreaRect(best);
+    const pts = cv.RotatedRect.points(rot);
+    return pts.map((p) => ({ x: p.x, y: p.y }));
+  } catch {
+    return null;
+  } finally {
+    best?.delete();
+    edges?.delete();
+    contours?.delete();
+    hierarchy?.delete();
+  }
+}
+
 // Returns 4 {x,y} in the image's natural pixel space. Falls back to an inset
 // rectangle if no convincing quad is found. Detection runs on a downscaled copy
 // (full-res phone photos are huge — slow and can exhaust iOS memory), then the
@@ -142,65 +272,113 @@ export function detectQuad(cv, imgEl) {
     return inset(0.08, 0.08);
   }
 
-  let src, gray, blur, edges, kernel, contours, hierarchy, best;
+  const frameArea = dw * dh;
+  const minArea = frameArea * 0.1; // ignore quads smaller than 10% of frame
+  const cx = dw / 2;
+  const cy = dh / 2;
+
+  // Score a candidate quad: bigger, more rectangular, and more centered is
+  // better. Returns -Infinity for rejects.
+  const scoreQuad = (pts) => {
+    const area = polyArea(pts);
+    if (area < minArea) return -Infinity;
+    if (!isConvexQuad(pts)) return -Infinity;
+    // Rectangularity: how close opposite sides are in length + corners to 90°.
+    const rect = rectangularity(pts);
+    if (rect < 0.55) return -Infinity;
+    // Centeredness: penalize quads whose centroid is far from image center.
+    const c = centroid(pts);
+    const off = Math.hypot(c.x - cx, c.y - cy) / Math.hypot(cx, cy);
+    return area / frameArea + rect * 0.5 - off * 0.4;
+  };
+
+  let src, gray, blur;
+  const temps = [];
   try {
     src = cv.imread(work);
     gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
     blur = new cv.Mat();
     cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
-    edges = new cv.Mat();
-    cv.Canny(blur, edges, 50, 150); // a bit more sensitive than 75/200
-    kernel = cv.Mat.ones(5, 5, cv.CV_8U);
-    cv.dilate(edges, edges, kernel);
 
-    contours = new cv.MatVector();
-    hierarchy = new cv.Mat();
-    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+    // Auto Canny thresholds from the image median, plus fixed fallbacks —
+    // different lighting needs different sensitivity.
+    const med = medianGray(cv, gray);
+    const autoLo = Math.max(0, Math.round(0.66 * med));
+    const autoHi = Math.min(255, Math.round(1.33 * med));
+    const cannyPairs = [
+      [autoLo, autoHi],
+      [50, 150],
+      [30, 90],
+      [75, 200],
+    ];
 
-    let bestArea = dw * dh * 0.1; // ignore anything smaller than 10% of frame
-    for (let i = 0; i < contours.size(); i++) {
-      const c = contours.get(i);
-      const peri = cv.arcLength(c, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(c, approx, 0.02 * peri, true);
-      if (approx.rows === 4 && cv.isContourConvex(approx)) {
-        const area = cv.contourArea(approx);
-        if (area > bestArea) {
-          bestArea = area;
-          if (best) best.delete();
-          best = approx.clone();
+    let bestPts = null;
+    let bestScore = -Infinity;
+
+    for (const [lo, hi] of cannyPairs) {
+      const edges = new cv.Mat();
+      temps.push(edges);
+      cv.Canny(blur, edges, lo, hi);
+      const kernel = cv.Mat.ones(5, 5, cv.CV_8U);
+      cv.dilate(edges, edges, kernel);
+      kernel.delete();
+
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      temps.push(hierarchy);
+      cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+      for (let i = 0; i < contours.size(); i++) {
+        const c = contours.get(i);
+        const peri = cv.arcLength(c, true);
+        // Try a few approximation tolerances per contour.
+        for (const eps of [0.02, 0.04, 0.06]) {
+          const approx = new cv.Mat();
+          cv.approxPolyDP(c, approx, eps * peri, true);
+          if (approx.rows === 4) {
+            const d = approx.data32S;
+            const pts = [
+              { x: d[0], y: d[1] },
+              { x: d[2], y: d[3] },
+              { x: d[4], y: d[5] },
+              { x: d[6], y: d[7] },
+            ];
+            const s = scoreQuad(pts);
+            if (s > bestScore) {
+              bestScore = s;
+              bestPts = pts;
+            }
+          }
+          approx.delete();
         }
+        c.delete();
       }
-      approx.delete();
-      c.delete();
+      contours.delete();
+
+      // A strong, well-centered hit early lets us stop scanning more thresholds.
+      if (bestScore > 0.7) break;
     }
 
-    if (best) {
-      // approxPolyDP returns CV_32SC2 (2 channels). Read x,y from the flat
-      // int32 buffer (data32S) — intAt(row,col) is unreliable for 2-channel.
-      const d = best.data32S;
-      const pts = [];
-      for (let i = 0; i < 4; i++) {
-        // Scale detection-space points back to natural image coordinates.
-        pts.push({ x: d[i * 2] / ratio, y: d[i * 2 + 1] / ratio });
-      }
-      if (pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
-        return orderPoints(pts);
-      }
+    // Fallback: rotated bounding box of the largest contour — always 4 corners,
+    // a solid starting guess even when no clean quad was approximated.
+    if (!bestPts) {
+      bestPts = largestMinAreaRect(cv, blur, minArea);
+    }
+
+    if (bestPts && bestPts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
+      // Scale detection-space points back to natural image coordinates.
+      const scaled = bestPts.map((p) => ({ x: p.x / ratio, y: p.y / ratio }));
+      return orderPoints(scaled);
     }
     return inset(0.08, 0.08);
   } catch {
     return inset(0.08, 0.08);
   } finally {
-    best?.delete();
-    kernel?.delete();
     src?.delete();
     gray?.delete();
     blur?.delete();
-    edges?.delete();
-    contours?.delete();
-    hierarchy?.delete();
+    temps.forEach((m) => m?.delete());
   }
 }
 

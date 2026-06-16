@@ -30,9 +30,7 @@ const TAG_SEED = [
     2 → describe by voice (DescribeStep)
     3 → review + save (ReviewStep)
 
-  All field state lives here so it survives moving between steps. `voiceFilled`
-  tracks which fields the voice step populated, so the review step can flag them
-  for confirm-as-you-go.
+  All field state lives here so it survives moving between steps.
 
   `rawUrl` is the un-cropped capture; `finalUrl` is the cropped result that gets
   saved. On save we hand a lightweight summary back up via onSaved so the hub can
@@ -53,7 +51,6 @@ export default function CaptureWizard({ rawUrl, onClose, onSaved }) {
   // Collections held as names in the draft; resolved to record ids at save time
   // so they attach to whatever artist is final (even if you switch artists).
   const [collectionNames, setCollectionNames] = useState([]);
-  const [voiceFilled, setVoiceFilled] = useState(() => new Set());
 
   const [artists, setArtists] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -75,9 +72,6 @@ export default function CaptureWizard({ rawUrl, onClose, onSaved }) {
       });
   }, []);
 
-  const markVoice = (key) =>
-    setVoiceFilled((prev) => new Set(prev).add(key));
-
   /* ---------- voice: full-clip parse ---------- */
   async function handleClip(blob) {
     setBusyField("clip");
@@ -88,32 +82,20 @@ export default function CaptureWizard({ rawUrl, onClose, onSaved }) {
         artTypes: ART_TYPES,
         knownTags: TAG_SEED,
       });
-      if (parsed.title) {
-        setTitle(parsed.title);
-        markVoice("title");
-      }
+      if (parsed.title) setTitle(parsed.title);
       if (parsed.artist) {
         setArtistName(parsed.artist);
         setArtistId(null);
-        markVoice("artist");
       }
-      if (parsed.year) {
-        setYear(parsed.year);
-        markVoice("year");
-      }
+      if (parsed.year) setYear(parsed.year);
       if (parsed.art_type) setArtType(parsed.art_type);
-      if (parsed.description) {
-        setDescription(parsed.description);
-        markVoice("description");
-      }
+      if (parsed.description) setDescription(parsed.description);
       if (parsed.tags?.length)
         setTags((prev) => Array.from(new Set([...prev, ...parsed.tags])));
-      if (parsed.collections?.length) {
+      if (parsed.collections?.length)
         setCollectionNames((prev) =>
           Array.from(new Set([...prev, ...parsed.collections])),
         );
-        markVoice("collections");
-      }
       setStatus({ type: "success", msg: "Fields filled — review and save." });
     } catch (e) {
       setStatus({ type: "error", msg: e.message });
@@ -130,7 +112,6 @@ export default function CaptureWizard({ rawUrl, onClose, onSaved }) {
         const text = (await transcribe(blob)).trim();
         setter(text);
         if (key === "artist") setArtistId(null);
-        markVoice(key);
         setStatus(null);
       } catch (e) {
         setStatus({ type: "error", msg: e.message });
@@ -276,7 +257,6 @@ export default function CaptureWizard({ rawUrl, onClose, onSaved }) {
           collections={collections}
           collectionNames={collectionNames}
           setCollectionNames={setCollectionNames}
-          voiceFilled={voiceFilled}
           status={status}
           saving={saving}
           onBack={() => setStep(2)}

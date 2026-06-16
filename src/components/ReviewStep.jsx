@@ -15,14 +15,8 @@ import { Spinner } from "@/components/ui/spinner";
 
 /*
   Step 3 of the capture wizard: review the (mostly voice-filled) fields and save.
-
-  Confirm-as-you-go: any field that voice populated starts in an amber "check
-  this" state. Focusing/editing it marks it confirmed (neutral). Save is always
-  available, but if amber fields remain it asks "save anyway?" once — a soft
-  nudge, not a hard gate.
-
-  `voiceFilled` is a Set of field keys the voice step populated. `confirmed` is
-  owned here (review-local). Field values + setters live in the parent wizard.
+  All fields are plain editable inputs; field values + setters live in the parent
+  wizard.
 */
 const ART_TYPES = [
   { label: "Painting", value: "Painting" },
@@ -38,8 +32,6 @@ const TAG_SEED = [
   "modern",
   "contemporary",
 ];
-
-const VOICE_FIELDS = ["title", "artist", "year", "description", "collections"];
 
 export default function ReviewStep({
   imageDataUrl,
@@ -61,28 +53,13 @@ export default function ReviewStep({
   collections,
   collectionNames,
   setCollectionNames,
-  voiceFilled,
   status,
   saving,
   onBack,
   onSave,
 }) {
-  const [confirmed, setConfirmed] = useState(() => new Set());
   const [tagInput, setTagInput] = useState("");
   const [collectionInput, setCollectionInput] = useState("");
-  const [pendingSave, setPendingSave] = useState(false);
-
-  const confirm = (key) =>
-    setConfirmed((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
-
-  // A field needs checking if voice filled it and you haven't touched it yet.
-  const needsCheck = (key) => voiceFilled.has(key) && !confirmed.has(key);
-  const uncheckedCount = VOICE_FIELDS.filter(needsCheck).length;
 
   const artistMatches = useMemo(() => {
     const q = artistName.trim().toLowerCase();
@@ -119,15 +96,6 @@ export default function ReviewStep({
     setCollectionNames(collectionNames.filter((x) => x !== name));
   }
 
-  function attemptSave() {
-    if (uncheckedCount > 0 && !pendingSave) {
-      setPendingSave(true);
-      return;
-    }
-    setPendingSave(false);
-    onSave();
-  }
-
   const isSculpture = artType === "Sculpture";
 
   return (
@@ -138,13 +106,6 @@ export default function ReviewStep({
           alt="Artwork"
           className="mx-auto max-h-40 rounded-lg border"
         />
-      )}
-
-      {uncheckedCount > 0 && (
-        <p className="text-center text-xs text-amber-600 dark:text-amber-500">
-          {uncheckedCount} voice-filled field{uncheckedCount > 1 ? "s" : ""} to
-          check — tap each to confirm.
-        </p>
       )}
 
       <Field>
@@ -168,23 +129,23 @@ export default function ReviewStep({
         )}
       </Field>
 
-      <CheckField label="Title" flagged={needsCheck("title")}>
+      <Field>
+        <FieldLabel>Title</FieldLabel>
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onFocus={() => confirm("title")}
           placeholder="Untitled"
         />
-      </CheckField>
+      </Field>
 
-      <CheckField label="Artist" flagged={needsCheck("artist")}>
+      <Field>
+        <FieldLabel>Artist</FieldLabel>
         <Input
           value={artistName}
           onChange={(e) => {
             setArtistName(e.target.value);
             setArtistId(null);
           }}
-          onFocus={() => confirm("artist")}
           placeholder="Artist name"
           autoComplete="off"
         />
@@ -212,10 +173,11 @@ export default function ReviewStep({
               ? `New artist “${artistName.trim()}” will be created on save.`
               : "Type to search or add a new artist."}
         </FieldDescription>
-      </CheckField>
+      </Field>
 
       {/* Collections — scoped to the selected artist; multi-select */}
-      <CheckField label="Collections" flagged={needsCheck("collections")}>
+      <Field>
+        <FieldLabel>Collections</FieldLabel>
         {!artistName.trim() ? (
           <FieldDescription>Pick an artist first.</FieldDescription>
         ) : (
@@ -227,10 +189,7 @@ export default function ReviewStep({
                     key={name}
                     variant="secondary"
                     className="cursor-pointer"
-                    onClick={() => {
-                      confirm("collections");
-                      removeCollection(name);
-                    }}
+                    onClick={() => removeCollection(name)}
                   >
                     {name} ✕
                   </Badge>
@@ -240,11 +199,9 @@ export default function ReviewStep({
             <Input
               value={collectionInput}
               onChange={(e) => setCollectionInput(e.target.value)}
-              onFocus={() => confirm("collections")}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === ",") {
                   e.preventDefault();
-                  confirm("collections");
                   addCollection(collectionInput);
                 }
               }}
@@ -261,10 +218,7 @@ export default function ReviewStep({
                       key={c.id}
                       variant="outline"
                       className="cursor-pointer"
-                      onClick={() => {
-                        confirm("collections");
-                        addCollection(c.name);
-                      }}
+                      onClick={() => addCollection(c.name)}
                     >
                       + {c.name}
                     </Badge>
@@ -278,26 +232,26 @@ export default function ReviewStep({
             </FieldDescription>
           </>
         )}
-      </CheckField>
+      </Field>
 
-      <CheckField label="Year" flagged={needsCheck("year")}>
+      <Field>
+        <FieldLabel>Year</FieldLabel>
         <Input
           value={year}
           onChange={(e) => setYear(e.target.value)}
-          onFocus={() => confirm("year")}
           placeholder="e.g. 1987 or c. 1890"
         />
-      </CheckField>
+      </Field>
 
-      <CheckField label="Description" flagged={needsCheck("description")}>
+      <Field>
+        <FieldLabel>Description</FieldLabel>
         <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          onFocus={() => confirm("description")}
           rows={4}
           placeholder="Describe the work…"
         />
-      </CheckField>
+      </Field>
 
       <Field>
         <FieldLabel>Tags</FieldLabel>
@@ -353,55 +307,15 @@ export default function ReviewStep({
         </div>
       )}
 
-      {pendingSave && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-700 dark:bg-amber-950/40">
-          {uncheckedCount} field{uncheckedCount > 1 ? "s" : ""} still unchecked —
-          save anyway?
-        </div>
-      )}
-
       <div className="mt-auto flex gap-2 pt-2">
         <Button variant="outline" className="flex-1" onClick={onBack}>
           ← Back
         </Button>
-        <Button
-          className="flex-1"
-          size="lg"
-          onClick={attemptSave}
-          disabled={saving}
-        >
+        <Button className="flex-1" size="lg" onClick={onSave} disabled={saving}>
           {saving ? <Spinner className="mr-2" /> : null}
-          {pendingSave ? "Save anyway" : "Save artwork"}
+          Save artwork
         </Button>
       </div>
     </div>
-  );
-}
-
-/*
-  Wraps a field with the confirm-as-you-go amber treatment. When `flagged`,
-  shows an amber ring + "check this" hint; the inner input clears it on focus.
-*/
-function CheckField({ label, flagged, children }) {
-  return (
-    <Field>
-      <div className="flex items-center justify-between">
-        <FieldLabel>{label}</FieldLabel>
-        {flagged && (
-          <span className="text-xs font-medium text-amber-600 dark:text-amber-500">
-            ● tap to confirm
-          </span>
-        )}
-      </div>
-      <div
-        className={
-          flagged
-            ? "rounded-md ring-2 ring-amber-400/70 dark:ring-amber-500/60"
-            : ""
-        }
-      >
-        {children}
-      </div>
-    </Field>
   );
 }

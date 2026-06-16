@@ -7,31 +7,54 @@
   Coordinates throughout are in the source image's natural pixel space.
 */
 
-const OPENCV_URL = "https://docs.opencv.org/4.10.0/opencv.js";
+// Official OpenCV.js builds. opencv.org occasionally removes old version dirs
+// (4.10.0 vanished -> 404), so we try a primary then fall back to a CDN mirror.
+const OPENCV_URLS = [
+  "https://docs.opencv.org/4.9.0/opencv.js",
+  "https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.js",
+];
 let loadPromise = null;
 
-export function loadOpenCV() {
-  if (loadPromise) return loadPromise;
-  loadPromise = new Promise((resolve, reject) => {
-    if (window.cv && window.cv.Mat) return resolve(window.cv);
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = OPENCV_URL;
+    script.src = url;
     script.async = true;
     script.onload = () => {
       const cv = window.cv;
       if (cv && cv.Mat) return resolve(cv);
-      // Newer builds expose a promise or an init callback.
+      // Some builds expose a promise or init callback before cv.Mat exists.
       if (cv instanceof Promise) {
         cv.then(resolve).catch(reject);
       } else if (cv) {
         cv.onRuntimeInitialized = () => resolve(cv);
       } else {
-        reject(new Error("OpenCV failed to initialize"));
+        reject(new Error("OpenCV loaded but did not initialize"));
       }
     };
-    script.onerror = () => reject(new Error("Failed to load OpenCV.js"));
+    script.onerror = () => reject(new Error(`Failed to load ${url}`));
     document.body.appendChild(script);
   });
+}
+
+export function loadOpenCV() {
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    if (window.cv && window.cv.Mat) return window.cv;
+    let lastErr;
+    for (const url of OPENCV_URLS) {
+      try {
+        return await loadScript(url);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    // Reset so a later retry can attempt the load again.
+    loadPromise = null;
+    throw new Error(
+      `Couldn't load the de-skew engine (OpenCV.js). ${lastErr?.message || ""}`,
+    );
+  })();
   return loadPromise;
 }
 

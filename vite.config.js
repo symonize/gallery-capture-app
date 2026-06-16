@@ -35,11 +35,13 @@ export default defineConfig({
         // Cache the heavy OpenCV.js WASM glue so de-skew works offline after first load.
         runtimeCaching: [
           {
-            urlPattern: /https:\/\/docs\.opencv\.org\/.*opencv\.js/,
+            // Cache the OpenCV.js bundle from either source (opencv.org or the
+            // jsDelivr fallback) so de-skew works offline after first load.
+            urlPattern: /opencv\.js(\?.*)?$/,
             handler: "CacheFirst",
             options: {
               cacheName: "opencv",
-              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
         ],

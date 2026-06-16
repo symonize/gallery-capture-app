@@ -1,72 +1,100 @@
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { motion } from "motion/react";
+import { Paintbrush, Box } from "lucide-react";
 import Settings from "./Settings";
+import BottomNav from "./BottomNav";
+import { listContainer, listItem, springGentle } from "@/lib/motion";
 
 /*
-  Home base between captures. Shows the running list of pieces saved this
-  session and the primary "New artwork" action. Session is in-memory only, so
-  this resets on reload — the records themselves are safe in Airtable.
+  Home / hub (Figma "Cream Style"): greeting, big "Home" heading, a "Recent
+  additions" list of pieces saved this session, and the floating bottom nav.
+  Session is in-memory only and resets on reload — records are safe in Airtable.
 */
 export default function SessionHub({ session, onNew, onLogout }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
-    <div className="flex flex-1 flex-col gap-5">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Gallery Capture
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            {session.length > 0
-              ? `${session.length} captured this session`
-              : "Photo → straighten → speak → save"}
+    <div className="flex flex-1 flex-col pb-28">
+      <motion.header
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={springGentle}
+        className="pt-2"
+      >
+        <p className="text-sm text-muted-foreground">
+          Hello,{" "}
+          <span className="text-foreground">welcome back</span>
+        </p>
+        <h1 className="mt-2 text-[35px] font-medium leading-none tracking-[-0.03em]">
+          Home
+        </h1>
+      </motion.header>
+
+      <p className="mt-7 text-sm">Recent additions</p>
+
+      {session.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.15 }}
+          className="mt-4 flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground"
+        >
+          <span className="text-4xl">🖼️</span>
+          <p className="text-sm">No pieces captured yet.</p>
+          <p className="max-w-xs text-xs">
+            Tap the capture button below to photograph a piece, straighten it,
+            and dictate the details.
           </p>
-        </div>
-        <Settings onLogout={onLogout} />
-      </header>
+        </motion.div>
+      ) : (
+        <motion.ul
+          variants={listContainer}
+          initial="hidden"
+          animate="show"
+          className="mt-3 flex flex-col gap-3"
+        >
+          {session.map((item) => {
+            const TypeIcon = item.artType === "Sculpture" ? Box : Paintbrush;
+            return (
+              <motion.li
+                key={item.id}
+                variants={listItem}
+                whileTap={{ scale: 0.98 }}
+                className="flex items-center gap-3 rounded-lg bg-card p-2"
+              >
+                {item.thumbUrl ? (
+                  <img
+                    src={item.thumbUrl}
+                    alt=""
+                    className="size-12 shrink-0 rounded-md object-cover"
+                  />
+                ) : (
+                  <div className="size-12 shrink-0 rounded-md bg-accent" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.title}</p>
+                  <p className="truncate text-[11px] font-light text-muted-foreground">
+                    {item.artist || "Unknown artist"}
+                  </p>
+                </div>
+                <TypeIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              </motion.li>
+            );
+          })}
+        </motion.ul>
+      )}
 
-      {/* session list */}
-      <div className="flex flex-1 flex-col gap-2">
-        {session.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-            <span className="text-4xl">🖼️</span>
-            <p className="text-sm">No pieces captured yet.</p>
-            <p className="max-w-xs text-xs">
-              Tap “New artwork” to photograph a piece, straighten it, and dictate
-              the details.
-            </p>
-          </div>
-        ) : (
-          session.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center gap-3 rounded-lg border p-2 text-left"
-            >
-              {item.thumbUrl ? (
-                <img
-                  src={item.thumbUrl}
-                  alt=""
-                  className="size-12 shrink-0 rounded-md border object-cover"
-                />
-              ) : (
-                <div className="size-12 shrink-0 rounded-md border bg-muted" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{item.title}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {[item.artist || "Unknown artist", item.year]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              </div>
-              <span className="text-xs text-success">✓ saved</span>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* primary action, pinned at the bottom for thumb reach */}
-      <Button size="lg" className="w-full" onClick={onNew}>
-        📷 New artwork
-      </Button>
+      <BottomNav
+        active="home"
+        onCapture={onNew}
+        onHome={() => {}}
+        onSettings={() => setSettingsOpen(true)}
+      />
+      <Settings
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onLogout={onLogout}
+      />
     </div>
   );
 }

@@ -1,18 +1,14 @@
+import { motion } from "motion/react";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { MicButton } from "./VoiceCapture";
+import { springSnappy } from "@/lib/motion";
 
 /*
-  Step 2 of the capture wizard: dictate the artwork details.
-
-  Whole-clip mode is primary (one hold-to-talk that fills everything via
-  transcribe + parse). Field-by-field mics are the fallback. The cropped image
-  stays pinned at the top so you can read the piece while you talk.
-
-  All field state and the voice handlers live in the parent wizard — this is a
-  presentational step.
+  Step 2 (Transcribe): dictate the artwork details. Whole-clip mode is primary
+  (one hold-to-talk fills everything via transcribe + parse); field-by-field is
+  the fallback. Body-only — the sheet owns the Back/Next footer.
 */
 export default function DescribeStep({
   imageDataUrl,
@@ -30,52 +26,60 @@ export default function DescribeStep({
   status,
   onClip,
   dictateTo,
-  onBack,
-  onNext,
 }) {
   return (
-    <div className="flex flex-1 flex-col gap-5">
+    <div className="flex flex-col gap-5">
       {imageDataUrl && (
-        <img
+        <motion.img
           src={imageDataUrl}
           alt="Artwork"
-          className="mx-auto max-h-44 rounded-lg border"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={springSnappy}
+          className="mx-auto max-h-40 rounded-xl object-contain"
         />
       )}
 
-      {/* voice mode toggle */}
-      <div className="inline-flex w-full rounded-md border p-0.5">
-        <Button
-          className="flex-1"
-          size="sm"
-          variant={mode === "clip" ? "default" : "ghost"}
-          onClick={() => setMode("clip")}
-        >
-          Describe everything
-        </Button>
-        <Button
-          className="flex-1"
-          size="sm"
-          variant={mode === "fields" ? "default" : "ghost"}
-          onClick={() => setMode("fields")}
-        >
-          Field by field
-        </Button>
-      </div>
-
-      {mode === "clip" ? (
-        <div className="flex flex-col items-center gap-3 rounded-lg bg-muted/40 p-5 text-center">
-          <p className="text-sm text-muted-foreground">
-            Speak it all naturally — e.g. “Title Autumn Study, artist Maria Chen,
-            1987, oil on canvas, warm pastoral landscape.”
-          </p>
+      {/* primary whole-clip mic */}
+      {mode === "clip" && (
+        <div className="flex flex-col items-center gap-3">
           <MicButton
             onComplete={onClip}
             busy={busyField === "clip"}
-            label="Hold to describe"
+            label="Start Transcription"
           />
+          <p className="max-w-xs text-center text-xs text-muted-foreground">
+            Hold and say it naturally — e.g. “Autumn Study by Maria Chen, 1987,
+            oil on canvas, warm pastoral landscape.”
+          </p>
         </div>
-      ) : (
+      )}
+
+      {/* mode toggle */}
+      <div className="relative flex rounded-full border border-border p-1 text-sm">
+        {["clip", "fields"].map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={
+              "relative z-10 flex-1 rounded-full py-1.5 transition-colors " +
+              (mode === m ? "text-white" : "text-muted-foreground")
+            }
+          >
+            {mode === m && (
+              <motion.span
+                layoutId="describe-mode"
+                transition={springSnappy}
+                className="absolute inset-0 -z-10 rounded-full bg-primary"
+              />
+            )}
+            {m === "clip" ? "Describe everything" : "Field by field"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "fields" && (
         <div className="flex flex-col gap-4">
           <Field>
             <FieldLabel>Title</FieldLabel>
@@ -139,34 +143,19 @@ export default function DescribeStep({
       )}
 
       {status && (
-        <StatusBanner status={status} />
+        <div
+          className={
+            "rounded-md px-3 py-2 text-sm " +
+            (status.type === "error"
+              ? "bg-destructive/10 text-destructive"
+              : status.type === "success"
+                ? "bg-success/10 text-success"
+                : "bg-muted text-muted-foreground")
+          }
+        >
+          {status.msg}
+        </div>
       )}
-
-      <div className="mt-auto flex gap-2 pt-2">
-        <Button variant="outline" className="flex-1" onClick={onBack}>
-          ← Back
-        </Button>
-        <Button className="flex-1" size="lg" onClick={onNext}>
-          Next →
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function StatusBanner({ status }) {
-  return (
-    <div
-      className={
-        "rounded-md px-3 py-2 text-sm " +
-        (status.type === "error"
-          ? "bg-destructive/10 text-destructive"
-          : status.type === "success"
-            ? "bg-success/10 text-success"
-            : "bg-muted text-muted-foreground")
-      }
-    >
-      {status.msg}
     </div>
   );
 }

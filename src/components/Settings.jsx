@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   Sheet,
-  SheetTrigger,
   SheetPopup,
   SheetHeader,
   SheetTitle,
@@ -15,10 +14,11 @@ import { Button } from "@/components/ui/button";
 import { getTheme, setTheme } from "@/lib/theme";
 
 /*
-  Settings sheet: theme toggle + log out. The app password is entered on the
-  AuthScreen, not here — logging out clears it and returns to that screen.
+  Settings sheet: theme toggle + log out. Controlled via open/onOpenChange so the
+  bottom-nav gear can open it. The app password is entered on the AuthScreen, not
+  here — logging out clears it and returns to that screen.
 */
-export default function Settings({ onLogout }) {
+export default function Settings({ open, onOpenChange, onLogout }) {
   const [theme, setThemeState] = useState(getTheme());
 
   // Theme applies immediately and persists.
@@ -27,8 +27,7 @@ export default function Settings({ onLogout }) {
   }
 
   return (
-    <Sheet>
-      <SheetTrigger render={<Button variant="outline" size="sm">Settings</Button>} />
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetPopup side="right">
         <SheetHeader>
           <SheetTitle>Settings</SheetTitle>

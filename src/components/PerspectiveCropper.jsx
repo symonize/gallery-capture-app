@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { motion } from "motion/react";
+import { Ruler, Scan, ChevronLeft, ChevronRight } from "lucide-react";
 import { loadOpenCV, detectQuad, warpToFlat } from "@/lib/opencv";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
 /*
@@ -170,11 +171,6 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="text-sm text-muted-foreground">
-        Corners are auto-detected. Drag to fine-tune (or tap Auto-detect to
-        retry), then straighten.
-      </div>
-
       {error && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
@@ -183,7 +179,7 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
 
       <div
         ref={wrapRef}
-        className="relative mx-auto touch-none select-none"
+        className="relative mx-auto touch-none select-none overflow-hidden rounded-2xl"
         onMouseMove={pointerMove}
         onMouseUp={pointerUp}
         onMouseLeave={pointerUp}
@@ -195,7 +191,7 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
           src={imageUrl}
           alt="Captured artwork"
           onLoad={onImgLoad}
-          className="block max-h-[60vh] w-auto max-w-full rounded-md"
+          className="block max-h-[46vh] w-auto max-w-full"
           draggable={false}
         />
 
@@ -207,8 +203,8 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
           >
             <polygon
               points={polyPoints}
-              fill="rgba(56,189,248,0.15)"
-              stroke="rgb(56,189,248)"
+              fill="rgba(39,109,255,0.15)"
+              stroke="rgb(39,109,255)"
               strokeWidth="2"
             />
           </svg>
@@ -219,34 +215,67 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
             key={i}
             onMouseDown={pointerDown(i)}
             onTouchStart={pointerDown(i)}
-            className="absolute z-10 h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-white bg-sky-400 shadow-md active:cursor-grabbing"
+            className="absolute z-10 h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-white bg-primary shadow-md active:cursor-grabbing"
             style={{ left: c.x * scale, top: c.y * scale }}
           />
         ))}
 
         {!ready && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/60">
-            <Spinner />{" "}
-            <span className="ml-2 text-sm">Loading de-skew… (build v9)</span>
+            <Spinner /> <span className="ml-2 text-sm">Loading de-skew…</span>
           </div>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={confirm} disabled={!ready || working}>
-          {working ? <Spinner className="mr-2" /> : null}
-          Straighten &amp; use
-        </Button>
-        <Button variant="outline" onClick={autoDetect} disabled={!ready}>
-          ⊡ Auto-detect
-        </Button>
-        <Button variant="outline" onClick={skip}>
-          Use as-is (skip)
-        </Button>
-        <Button variant="ghost" onClick={onRetake}>
-          Retake
-        </Button>
+      {/* Manual Fix / Auto Detect segmented row (Figma) */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          disabled={!ready}
+          className="flex flex-1 items-center justify-center gap-2 rounded-full bg-white py-3 text-sm font-medium text-black disabled:opacity-50"
+        >
+          <Ruler className="size-4" /> Manual Fix
+        </button>
+        <motion.button
+          type="button"
+          onClick={autoDetect}
+          disabled={!ready}
+          whileTap={ready ? { scale: 0.96 } : undefined}
+          className="flex flex-1 items-center justify-center gap-2 rounded-full border border-border py-3 text-sm font-medium text-muted-foreground disabled:opacity-50"
+        >
+          <Scan className="size-4" /> Auto Detect
+        </motion.button>
       </div>
+
+      {/* Retake / Next (these are the step-1 footer actions, kept with the image) */}
+      <div className="flex gap-3 pt-1">
+        <motion.button
+          type="button"
+          onClick={onRetake}
+          whileTap={{ scale: 0.96 }}
+          className="flex flex-1 items-center justify-center gap-1 rounded-full bg-secondary py-3 text-sm font-medium"
+        >
+          <ChevronLeft className="size-4" /> Retake
+        </motion.button>
+        <motion.button
+          type="button"
+          onClick={confirm}
+          disabled={!ready || working}
+          whileTap={ready && !working ? { scale: 0.96 } : undefined}
+          className="flex flex-1 items-center justify-center gap-1 rounded-full bg-white py-3 text-sm font-medium text-black disabled:opacity-50"
+        >
+          {working ? <Spinner className="size-4" /> : null}
+          Next <ChevronRight className="size-4" />
+        </motion.button>
+      </div>
+
+      <button
+        type="button"
+        onClick={skip}
+        className="mx-auto text-xs text-muted-foreground underline-offset-2 hover:underline"
+      >
+        Use as-is (skip straighten)
+      </button>
     </div>
   );
 }

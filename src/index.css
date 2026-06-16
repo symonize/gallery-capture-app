@@ -1,6 +1,5 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/host-grotesk";
 /*
   ---break---
 */
@@ -42,44 +41,49 @@
   }
 
   .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.985 0 0);
+    /* Figma "Cream Style" palette: pure-black bg, #181818 cards, blue accent. */
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: #181818;
+    --card-foreground: #ffffff;
+    --popover: #121212;
+    --popover-foreground: #ffffff;
+    --primary: #276dff;
+    --primary-foreground: #ffffff;
+    --secondary: #181818;
+    --secondary-foreground: #ffffff;
+    --muted: #181818;
+    --muted-foreground: rgba(255, 255, 255, 0.5);
+    --accent: #1f1f1f;
+    --accent-foreground: #ffffff;
+    --destructive: #e0241b;
+    --destructive-foreground: #ffffff;
     --success: oklch(0.62 0.17 145);
-    --success-foreground: oklch(0.985 0 0);
+    --success-foreground: #ffffff;
     --warning: oklch(0.75 0.16 80);
     --warning-foreground: oklch(0.205 0 0);
-    --info: oklch(0.6 0.13 250);
-    --info-foreground: oklch(0.985 0 0);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --info: #276dff;
+    --info-foreground: #ffffff;
+    --border: rgba(255, 255, 255, 0.17);
+    --input: rgba(255, 255, 255, 0.17);
+    --ring: #276dff;
   }
   * {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
   code, kbd, samp, pre {
     font-family: var(--font-mono);
   }
-  html {
-    @apply font-sans font-mono;
-  }
+}
+
+@theme {
+  /* Real font values (not `inline`, which expects var() references). This also
+     overrides Tailwind's --default-font-family used on the html element. */
+  --font-sans: "Host Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --default-font-family: "Host Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
 @theme inline {
@@ -118,9 +122,8 @@
   --animate-toast-success-even: toast-success-even 0.32s cubic-bezier(0.5, 1, 0.89, 1);
   --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
   --animate-toast-error-even: toast-error-even 0.28s cubic-bezier(0.5, 1, 0.89, 1);
-  --font-heading: 'Inter', sans-serif;
-  --font-mono: 'Geist Mono', monospace;
-  --font-sans: 'Inter', sans-serif;
+  --font-heading: 'Host Grotesk Variable', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -225,8 +228,7 @@
     background-color: var(--background);
     color: var(--foreground);
     -webkit-font-smoothing: antialiased;
-    font-family:
-      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--font-sans);
     /* respect iOS safe areas in standalone PWA mode */
     padding: env(safe-area-inset-top) env(safe-area-inset-right)
       env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -287,31 +289,32 @@
 */
 
 .dark {
-  --destructive-foreground: var(--color-red-400);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-400);
+  /* Figma "Cream Style": pure-black bg, #181818 cards, blue (#276dff) accent. */
+  --destructive-foreground: #ffffff;
+  --info: #276dff;
+  --info-foreground: #ffffff;
   --success: var(--color-emerald-500);
   --success-foreground: var(--color-emerald-400);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-400);
-  --accent: --alpha(var(--color-white) / 4%);
-  --accent-foreground: var(--color-neutral-100);
-  --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
-  --border: --alpha(var(--color-white) / 6%);
-  --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --card-foreground: var(--color-neutral-100);
-  --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
-  --foreground: var(--color-neutral-100);
-  --input: --alpha(var(--color-white) / 8%);
-  --muted: --alpha(var(--color-white) / 4%);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --popover-foreground: var(--color-neutral-100);
-  --primary: var(--color-neutral-100);
-  --primary-foreground: var(--color-neutral-800);
-  --ring: var(--color-neutral-500);
-  --secondary: --alpha(var(--color-white) / 4%);
-  --secondary-foreground: var(--color-neutral-100);
+  --accent: #1f1f1f;
+  --accent-foreground: #ffffff;
+  --background: #000000;
+  --border: rgba(255, 255, 255, 0.17);
+  --card: #181818;
+  --card-foreground: #ffffff;
+  --destructive: #e0241b;
+  --foreground: #ffffff;
+  --input: rgba(255, 255, 255, 0.17);
+  --muted: #181818;
+  --muted-foreground: rgba(255, 255, 255, 0.5);
+  --popover: #121212;
+  --popover-foreground: #ffffff;
+  --primary: #276dff;
+  --primary-foreground: #ffffff;
+  --ring: #276dff;
+  --secondary: #181818;
+  --secondary-foreground: #ffffff;
   --chart-1: var(--color-blue-700);
   --chart-2: var(--color-emerald-500);
   --chart-3: var(--color-amber-500);

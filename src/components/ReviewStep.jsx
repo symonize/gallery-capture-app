@@ -9,9 +9,7 @@ import {
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
 
 /*
   Step 3 of the capture wizard: review the (mostly voice-filled) fields and save.
@@ -54,9 +52,6 @@ export default function ReviewStep({
   collectionNames,
   setCollectionNames,
   status,
-  saving,
-  onBack,
-  onSave,
 }) {
   const [tagInput, setTagInput] = useState("");
   const [collectionInput, setCollectionInput] = useState("");
@@ -99,12 +94,12 @@ export default function ReviewStep({
   const isSculpture = artType === "Sculpture";
 
   return (
-    <div className="flex flex-1 flex-col gap-5">
+    <div className="flex flex-col gap-5">
       {imageDataUrl && (
         <img
           src={imageDataUrl}
           alt="Artwork"
-          className="mx-auto max-h-40 rounded-lg border"
+          className="mx-auto max-h-40 rounded-xl object-contain"
         />
       )}
 
@@ -306,16 +301,6 @@ export default function ReviewStep({
           {status.msg}
         </div>
       )}
-
-      <div className="mt-auto flex gap-2 pt-2">
-        <Button variant="outline" className="flex-1" onClick={onBack}>
-          ← Back
-        </Button>
-        <Button className="flex-1" size="lg" onClick={onSave} disabled={saving}>
-          {saving ? <Spinner className="mr-2" /> : null}
-          Save artwork
-        </Button>
-      </div>
     </div>
   );
 }

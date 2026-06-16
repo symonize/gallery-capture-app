@@ -15,24 +15,57 @@ const OPENCV_URLS = [
 ];
 let loadPromise = null;
 
+// OpenCV.js is an Emscripten module: the script loads quickly but the WASM
+// runtime initializes asynchronously afterward. The reliable signal is
+// window.cv.Mat becoming available, announced via Module.onRuntimeInitialized.
 function loadScript(url) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      const cv = window.cv;
+      if (cv && cv.Mat) {
+        settled = true;
+        clearInterval(poll);
+        clearTimeout(timeout);
+        resolve(cv);
+      }
+    };
+
+    // Pre-register the init hook the runtime calls when WASM is ready.
+    window.Module = {
+      ...(window.Module || {}),
+      onRuntimeInitialized: finish,
+    };
+
     const script = document.createElement("script");
     script.src = url;
     script.async = true;
+    // Some builds resolve cv as a promise; some set window.cv synchronously
+    // already initialized. Cover those at onload, then fall back to polling.
     script.onload = () => {
       const cv = window.cv;
-      if (cv && cv.Mat) return resolve(cv);
-      // Some builds expose a promise or init callback before cv.Mat exists.
-      if (cv instanceof Promise) {
-        cv.then(resolve).catch(reject);
-      } else if (cv) {
-        cv.onRuntimeInitialized = () => resolve(cv);
-      } else {
-        reject(new Error("OpenCV loaded but did not initialize"));
+      if (cv && cv.Mat) return finish();
+      if (cv && typeof cv.then === "function") {
+        cv.then(() => finish()).catch(reject);
       }
+      // otherwise wait for onRuntimeInitialized / the poll below
     };
-    script.onerror = () => reject(new Error(`Failed to load ${url}`));
+    script.onerror = () => {
+      clearInterval(poll);
+      clearTimeout(timeout);
+      reject(new Error(`Failed to load ${url}`));
+    };
+
+    // Belt-and-suspenders: poll for cv.Mat in case the init callback is missed.
+    const poll = setInterval(finish, 150);
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        clearInterval(poll);
+        reject(new Error(`${url} loaded but OpenCV never initialized`));
+      }
+    }, 25000);
+
     document.body.appendChild(script);
   });
 }

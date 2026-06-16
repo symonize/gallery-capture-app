@@ -95,12 +95,17 @@ export function detectQuad(cv, imgEl) {
     }
 
     if (best) {
+      // approxPolyDP returns CV_32SC2 (2 channels). Read x,y from the flat
+      // int32 buffer (data32S) — intAt(row,col) is unreliable for 2-channel.
+      const d = best.data32S;
       const pts = [];
       for (let i = 0; i < 4; i++) {
-        pts.push({ x: best.intAt(i, 0), y: best.intAt(i, 1) });
+        pts.push({ x: d[i * 2], y: d[i * 2 + 1] });
       }
       best.delete();
-      return orderPoints(pts);
+      if (pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
+        return orderPoints(pts);
+      }
     }
     return inset(0.08, 0.08);
   } catch {

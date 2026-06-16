@@ -107,6 +107,18 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
     dragging.current = null;
   }
 
+  // Re-run edge detection to snap the corners back onto the artwork.
+  function autoDetect() {
+    const img = imgRef.current;
+    if (!img || !cvRef.current) return;
+    try {
+      setCorners(detectQuad(cvRef.current, img));
+      setError("");
+    } catch {
+      setCorners(insetCorners(img.naturalWidth, img.naturalHeight));
+    }
+  }
+
   // "Use as-is": export the original image as a JPEG data URL (no warp), so the
   // save path always receives a base64 data URL — never the raw blob: object URL.
   function skip() {
@@ -120,16 +132,27 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
   }
 
   function confirm() {
-    if (!cvRef.current || !corners) return;
+    if (!cvRef.current) {
+      setError("De-skew engine not ready yet — try again in a moment.");
+      return;
+    }
+    if (!corners || corners.length !== 4) {
+      setError("No artwork outline detected — drag the corners, then try again.");
+      return;
+    }
+    setError("");
     setWorking(true);
     // defer so the spinner paints before the (sync) warp blocks the thread
     requestAnimationFrame(() => {
       try {
         const canvas = warpToFlat(cvRef.current, imgRef.current, corners);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        if (!dataUrl || !dataUrl.startsWith("data:")) {
+          throw new Error("Straighten produced no image.");
+        }
         onConfirm(dataUrl);
       } catch (e) {
-        setError(e.message);
+        setError(`Straighten failed: ${e?.message || e}`);
       } finally {
         setWorking(false);
       }
@@ -142,7 +165,8 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
   return (
     <div className="flex flex-col gap-4">
       <div className="text-sm text-muted-foreground">
-        Drag the corners to the edges of the artwork, then straighten.
+        Corners are auto-detected. Drag to fine-tune (or tap Auto-detect to
+        retry), then straighten.
       </div>
 
       {error && (
@@ -205,6 +229,9 @@ export default function PerspectiveCropper({ imageUrl, onConfirm, onSkip, onReta
         <Button onClick={confirm} disabled={!ready || working}>
           {working ? <Spinner className="mr-2" /> : null}
           Straighten &amp; use
+        </Button>
+        <Button variant="outline" onClick={autoDetect} disabled={!ready}>
+          ⊡ Auto-detect
         </Button>
         <Button variant="outline" onClick={skip}>
           Use as-is (skip)

@@ -204,36 +204,69 @@ export function detectQuad(cv, imgEl) {
   }
 }
 
-// Four-point transform. `points` = 4 {x,y} in image pixel space (any order).
+// Four-point transform. `points` = 4 {x,y} in the image's natural pixel space.
 // Returns an HTMLCanvasElement with the flattened artwork.
+//
+// The source is downscaled to a capped size before the warp: a full-res phone
+// photo (12MP) and/or a large output Size make warpPerspective produce an empty
+// (black) result on iOS Safari due to memory limits. ~1600px on the long edge
+// is plenty for cataloging.
 export function warpToFlat(cv, imgEl, points) {
-  const [tl, tr, br, bl] = orderPoints(points);
+  const natW = imgEl.naturalWidth || imgEl.width;
+  const natH = imgEl.naturalHeight || imgEl.height;
+
+  const MAX = 1600;
+  const ratio = Math.min(1, MAX / Math.max(natW, natH));
+  const sw = Math.max(1, Math.round(natW * ratio));
+  const sh = Math.max(1, Math.round(natH * ratio));
+
+  // Render the source into a capped-size canvas; scale the corner points to match.
+  const work = document.createElement("canvas");
+  work.width = sw;
+  work.height = sh;
+  work.getContext("2d").drawImage(imgEl, 0, 0, sw, sh);
+
+  const [tl, tr, br, bl] = orderPoints(points).map((p) => ({
+    x: p.x * ratio,
+    y: p.y * ratio,
+  }));
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const maxW = Math.max(dist(br, bl), dist(tr, tl));
-  const maxH = Math.max(dist(tr, br), dist(tl, bl));
-  const W = Math.round(maxW);
-  const H = Math.round(maxH);
+  // Cap output so neither side exceeds MAX either.
+  let W = Math.round(Math.max(dist(br, bl), dist(tr, tl)));
+  let H = Math.round(Math.max(dist(tr, br), dist(tl, bl)));
+  const outRatio = Math.min(1, MAX / Math.max(W, H));
+  W = Math.max(1, Math.round(W * outRatio));
+  H = Math.max(1, Math.round(H * outRatio));
 
-  const src = cv.imread(imgEl);
-  const dst = new cv.Mat();
-  const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y,
-  ]);
-  const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    0, 0, W, 0, W, H, 0, H,
-  ]);
-  const M = cv.getPerspectiveTransform(srcTri, dstTri);
-  cv.warpPerspective(src, dst, M, new cv.Size(W, H), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+  let src, dst, srcTri, dstTri, M;
+  try {
+    src = cv.imread(work);
+    dst = new cv.Mat();
+    srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y,
+    ]);
+    dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W, 0, W, H, 0, H]);
+    M = cv.getPerspectiveTransform(srcTri, dstTri);
+    cv.warpPerspective(
+      src,
+      dst,
+      M,
+      new cv.Size(W, H),
+      cv.INTER_LINEAR,
+      cv.BORDER_CONSTANT,
+      new cv.Scalar(),
+    );
 
-  const out = document.createElement("canvas");
-  out.width = W;
-  out.height = H;
-  cv.imshow(out, dst);
-
-  src.delete();
-  dst.delete();
-  srcTri.delete();
-  dstTri.delete();
-  M.delete();
-  return out;
+    const out = document.createElement("canvas");
+    out.width = W;
+    out.height = H;
+    cv.imshow(out, dst);
+    return out;
+  } finally {
+    src?.delete();
+    dst?.delete();
+    srcTri?.delete();
+    dstTri?.delete();
+    M?.delete();
+  }
 }

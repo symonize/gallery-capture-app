@@ -7,16 +7,16 @@
   Coordinates throughout are in the source image's natural pixel space.
 */
 
-// Self-contained OpenCV.js build (asm.js — the wasm is embedded, so there is no
-// separate .wasm file to fetch). The docs.opencv.org 4.x builds reference an
-// external opencv_js.wasm that 404s on the CDN, which made init hang forever.
-// This jsDelivr npm build is immutable, CORS-enabled, and needs no extra files.
-const OPENCV_URLS = ["https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.js"];
+// OpenCV.js WASM build with the wasm binary inlined (no external .wasm to
+// fetch — the opencv.org 4.x builds reference an opencv_js.wasm that 404s, and
+// the 8MB asm.js build stalls iOS Safari). This @techstark build is immutable,
+// CORS-enabled, and exposes window.cv as a thenable whose resolved value has
+// .Mat once the runtime is ready.
+const OPENCV_URLS = [
+  "https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.11.0-release.1/dist/opencv.js",
+];
 let loadPromise = null;
 
-// OpenCV.js is an Emscripten module: the script loads quickly but the WASM
-// runtime initializes asynchronously afterward. The reliable signal is
-// window.cv.Mat becoming available, announced via Module.onRuntimeInitialized.
 function loadScript(url) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -25,6 +25,7 @@ function loadScript(url) {
 
     const succeed = (cv) => {
       if (settled) return;
+      if (!cv || !cv.Mat) return; // not actually ready yet
       settled = true;
       clearInterval(poll);
       clearTimeout(timeout);
@@ -38,43 +39,40 @@ function loadScript(url) {
       reject(new Error(msg));
     };
 
-    // Instance whose .Mat we wait for, set once init is announced/observed.
-    let instance = null;
-    const check = () => {
-      const cv = instance || window.cv;
-      if (cv && cv.Mat) succeed(cv);
-    };
-
     const script = document.createElement("script");
     script.src = url;
     script.async = true;
     script.onload = () => {
       const cv = window.cv;
       if (cv && cv.Mat) return succeed(cv); // already initialized
+      // @techstark: window.cv is a thenable; its RESOLVED value carries .Mat
+      // (window.cv itself never gains .Mat — must use the awaited value).
       if (cv && typeof cv.then === "function") {
-        return cv.then(succeed).catch((e) => fail(e.message)); // promise build
+        cv.then((resolved) => succeed(resolved?.Mat ? resolved : window.cv)).catch(
+          (e) => fail(e.message),
+        );
+        return;
       }
+      // opencv.org UMD fallback: window.cv is the factory function.
       if (typeof cv === "function") {
-        // opencv.org UMD: window.cv is the factory. Invoke it with a Module
-        // carrying the runtime-ready hook; the resolved instance has .Mat.
         try {
-          instance = cv({ onRuntimeInitialized: check });
-          if (instance && typeof instance.then === "function") {
-            instance.then(succeed).catch((e) => fail(e.message));
+          const inst = cv({ onRuntimeInitialized: () => succeed(inst) });
+          if (inst && typeof inst.then === "function") {
+            inst.then(succeed).catch((e) => fail(e.message));
           }
         } catch (e) {
           return fail(`OpenCV init threw: ${e.message}`);
         }
       }
-      // else: wait for the poll to observe cv.Mat
+      // else: the poll below will catch a late window.cv.Mat
     };
     script.onerror = () => fail(`Failed to load ${url}`);
 
-    // Fallback: poll for .Mat in case the init callback is missed.
-    poll = setInterval(check, 150);
+    // Fallback poll in case the init signal is missed.
+    poll = setInterval(() => succeed(window.cv), 150);
     timeout = setTimeout(
       () => fail(`${url} loaded but OpenCV never initialized`),
-      12000,
+      20000,
     );
 
     document.body.appendChild(script);

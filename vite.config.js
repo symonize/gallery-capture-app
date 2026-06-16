@@ -32,6 +32,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Activate a new service worker immediately so fixes ship without an
+        // extra app reopen.
+        clientsClaim: true,
+        skipWaiting: true,
         // Cache the heavy OpenCV.js WASM glue so de-skew works offline after first load.
         runtimeCaching: [
           {
@@ -40,7 +44,8 @@ export default defineConfig({
             urlPattern: /opencv\.js(\?.*)?$/,
             handler: "CacheFirst",
             options: {
-              cacheName: "opencv",
+              // Bumped cache name -> discards any previously cached (bad) bundle.
+              cacheName: "opencv-v2",
               expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },

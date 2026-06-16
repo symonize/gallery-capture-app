@@ -21,50 +21,62 @@ let loadPromise = null;
 function loadScript(url) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const finish = () => {
+    let poll;
+    let timeout;
+
+    const succeed = (cv) => {
       if (settled) return;
-      const cv = window.cv;
-      if (cv && cv.Mat) {
-        settled = true;
-        clearInterval(poll);
-        clearTimeout(timeout);
-        resolve(cv);
-      }
+      settled = true;
+      clearInterval(poll);
+      clearTimeout(timeout);
+      resolve(cv);
+    };
+    const fail = (msg) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(poll);
+      clearTimeout(timeout);
+      reject(new Error(msg));
     };
 
-    // Pre-register the init hook the runtime calls when WASM is ready.
-    window.Module = {
-      ...(window.Module || {}),
-      onRuntimeInitialized: finish,
+    // Instance whose .Mat we wait for, set once init is announced/observed.
+    let instance = null;
+    const check = () => {
+      const cv = instance || window.cv;
+      if (cv && cv.Mat) succeed(cv);
     };
 
     const script = document.createElement("script");
     script.src = url;
     script.async = true;
-    // Some builds resolve cv as a promise; some set window.cv synchronously
-    // already initialized. Cover those at onload, then fall back to polling.
     script.onload = () => {
       const cv = window.cv;
-      if (cv && cv.Mat) return finish();
+      if (cv && cv.Mat) return succeed(cv); // already initialized
       if (cv && typeof cv.then === "function") {
-        cv.then(() => finish()).catch(reject);
+        return cv.then(succeed).catch((e) => fail(e.message)); // promise build
       }
-      // otherwise wait for onRuntimeInitialized / the poll below
+      if (typeof cv === "function") {
+        // opencv.org UMD: window.cv is the factory. Invoke it with a Module
+        // carrying the runtime-ready hook; the resolved instance has .Mat.
+        try {
+          instance = cv({ onRuntimeInitialized: check });
+          if (instance && typeof instance.then === "function") {
+            instance.then(succeed).catch((e) => fail(e.message));
+          }
+        } catch (e) {
+          return fail(`OpenCV init threw: ${e.message}`);
+        }
+      }
+      // else: wait for the poll to observe cv.Mat
     };
-    script.onerror = () => {
-      clearInterval(poll);
-      clearTimeout(timeout);
-      reject(new Error(`Failed to load ${url}`));
-    };
+    script.onerror = () => fail(`Failed to load ${url}`);
 
-    // Belt-and-suspenders: poll for cv.Mat in case the init callback is missed.
-    const poll = setInterval(finish, 150);
-    const timeout = setTimeout(() => {
-      if (!settled) {
-        clearInterval(poll);
-        reject(new Error(`${url} loaded but OpenCV never initialized`));
-      }
-    }, 25000);
+    // Fallback: poll for .Mat in case the init callback is missed.
+    poll = setInterval(check, 150);
+    timeout = setTimeout(
+      () => fail(`${url} loaded but OpenCV never initialized`),
+      25000,
+    );
 
     document.body.appendChild(script);
   });
